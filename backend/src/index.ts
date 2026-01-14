@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import apiRoutes from './routes/api';
 
 // Load environment variables
@@ -19,11 +20,15 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
   next();
 });
 
+// Serve static frontend files
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
+
 // API routes
 app.use('/api', apiRoutes);
 
 // Root endpoint
-app.get('/', (req: express.Request, res: express.Response) => {
+app.get('/api', (req: express.Request, res: express.Response) => {
   res.json({
     name: 'BAG Vastgoedfinder API',
     version: '1.0.0',
@@ -33,6 +38,11 @@ app.get('/', (req: express.Request, res: express.Response) => {
       gemeenten: '/api/gemeenten'
     }
   });
+});
+
+// Serve frontend for all other routes (SPA support)
+app.get('*', (req: express.Request, res: express.Response) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // Error handling middleware

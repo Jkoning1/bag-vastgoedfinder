@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { Verblijfsobject, VerblijfsobjectResponse, QueryParams } from '../types';
+import { fetchFromPDOK, rdToWgs84 } from '../services/pdok';
 
 const router = Router();
+
+// Use PDOK API directly instead of local database
+const USE_PDOK_API = process.env.USE_PDOK_API === 'true' || true;
 
 /**
  * GET /api/verblijfsobjecten
@@ -25,34 +29,41 @@ router.get('/verblijfsobjecten', async (req: Request<{}, {}, {}, QueryParams>, r
       });
     }
 
-    // SQL query - using lat/lon columns (no PostGIS needed)
-    // Using parameterized queries to prevent SQL injection
-    const query = `
-      SELECT 
-        v.id,
-        v.oppervlakte,
-        v.gemeente,
-        v.lat,
-        v.lon
-      FROM verblijfsobject v
-      WHERE v.gebruiksdoel = 'woonfunctie'
-        AND v.gemeente = $1
-        AND v.oppervlakte >= $2
-      ORDER BY v.oppervlakte DESC
-      LIMIT 1000;
-    `;
+    let verblijfsobjecten: Verblijfsobject[] = [];
 
-    const result = await pool.query(query, [gemeente, minOppervlakte]);
+    if (USE_PDOK_API) {
+      // Fetch directly from PDOK API
+      console.log(`Fetching from PDOK API: gemeente=${gemeente}, minOppervlakte=${minOppervlakte}`);
+      verblijfsobjecten = await fetchFromPDOK(gemeente, minOppervlakte);
+    } else {
+      // Use local database
+      const query = `
+        SELECT 
+          v.id,
+          v.oppervlakte,
+          v.gemeente,
+          v.lat,
+          v.lon
+        FROM verblijfsobject v
+        WHERE v.gebruiksdoel = 'woonfunctie'
+          AND v.gemeente = $1
+          AND v.oppervlakte >= $2
+        ORDER BY v.oppervlakte DESC
+        LIMIT 1000;
+      `;
 
-    const verblijfsobjecten: Verblijfsobject[] = result.rows.map((row: any) => ({
-      id: row.id,
-      oppervlakte: row.oppervlakte,
-      gemeente: row.gemeente,
-      geometry: {
-        type: 'Point',
-        coordinates: [row.lon, row.lat]
-      }
-    }));
+      const result = await pool.query(query, [gemeente, minOppervlakte]);
+
+      verblijfsobjecten = result.rows.map((row: any) => ({
+        id: row.id,
+        oppervlakte: row.oppervlakte,
+        gemeente: row.gemeente,
+        geometry: {
+          type: 'Point',
+          coordinates: [row.lon, row.lat]
+        }
+      }));
+    }
 
     const response: VerblijfsobjectResponse = {
       count: verblijfsobjecten.length,
