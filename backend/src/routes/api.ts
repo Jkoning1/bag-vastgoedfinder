@@ -25,14 +25,15 @@ router.get('/verblijfsobjecten', async (req: Request<{}, {}, {}, QueryParams>, r
       });
     }
 
-    // SQL query with PostGIS ST_AsGeoJSON to convert geometry to GeoJSON
+    // SQL query - using lat/lon columns (no PostGIS needed)
     // Using parameterized queries to prevent SQL injection
     const query = `
       SELECT 
         v.id,
         v.oppervlakte,
         v.gemeente,
-        ST_AsGeoJSON(v.geometrie)::json as geometry
+        v.lat,
+        v.lon
       FROM verblijfsobject v
       WHERE v.gebruiksdoel = 'woonfunctie'
         AND v.gemeente = $1
@@ -47,7 +48,10 @@ router.get('/verblijfsobjecten', async (req: Request<{}, {}, {}, QueryParams>, r
       id: row.id,
       oppervlakte: row.oppervlakte,
       gemeente: row.gemeente,
-      geometry: row.geometry
+      geometry: {
+        type: 'Point',
+        coordinates: [row.lon, row.lat]
+      }
     }));
 
     const response: VerblijfsobjectResponse = {
