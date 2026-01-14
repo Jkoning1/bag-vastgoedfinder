@@ -11,18 +11,26 @@ export async function fetchFromPDOK(
   minOppervlakte: number
 ): Promise<Verblijfsobject[]> {
   try {
-    // PDOK filtert niet goed op gemeente, dus we halen meer data en filteren lokaal
+    // Build CQL filter - filter direct op PDOK server
+    let cqlFilter = `oppervlakte>=${minOppervlakte}`;
+    
+    // Als gemeente is opgegeven, voeg toe aan filter
+    if (gemeente) {
+      // PDOK gebruikt 'woonplaatsnaam' veld
+      cqlFilter += ` AND woonplaatsnaam ILIKE '%${gemeente}%'`;
+    }
+    
     const params = {
       service: 'WFS',
       version: '2.0.0',
       request: 'GetFeature',
       typeName: 'bag:verblijfsobject',
       outputFormat: 'json',
-      count: 10000,
-      CQL_FILTER: `oppervlakte>=${minOppervlakte}`
+      count: gemeente ? 1000 : 100, // Meer resultaten voor specifieke gemeente
+      CQL_FILTER: cqlFilter
     };
 
-    console.log('Calling PDOK API with params:', params);
+    console.log('Calling PDOK API with CQL_FILTER:', cqlFilter);
 
     const response = await axios.get(PDOK_WFS_URL, {
       params,
@@ -35,6 +43,7 @@ export async function fetchFromPDOK(
     // Log first feature to see structure
     if (features.length > 0) {
       console.log('Sample feature properties:', JSON.stringify(features[0].properties, null, 2));
+      console.log('Sample geometry:', JSON.stringify(features[0].geometry, null, 2));
     }
     
     const results = features
@@ -56,8 +65,8 @@ export async function fetchFromPDOK(
           const [x, y] = coords;
           const [lon, lat] = rdToWgs84(x, y);
           
-          // Extract gemeente/woonplaats
-          const woonplaats = props.woonplaats || props.gemeentenaam || props.gemeente || '';
+          // Extract woonplaats
+          const woonplaats = props.woonplaatsnaam || props.woonplaats || props.gemeentenaam || props.gemeente || 'Onbekend';
           
           return {
             id: props.identificatie || String(Math.random()),
@@ -73,13 +82,9 @@ export async function fetchFromPDOK(
           return null;
         }
       })
-      .filter((v: Verblijfsobject | null): v is Verblijfsobject => 
-        v !== null && 
-        v.oppervlakte >= minOppervlakte &&
-        (!gemeente || v.gemeente.toLowerCase().includes(gemeente.toLowerCase()))
-      );
+      .filter((v: Verblijfsobject | null): v is Verblijfsobject => v !== null);
 
-    console.log(`Filtered to ${results.length} results for gemeente=${gemeente}`);
+    console.log(`Parsed ${results.length} results for gemeente=${gemeente}`);
     
     // If no results, return sample data
     if (results.length === 0) {
