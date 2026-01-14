@@ -32,6 +32,11 @@ export async function fetchFromPDOK(
     const features = response.data?.features || [];
     console.log(`Received ${features.length} features from PDOK`);
     
+    // Log first feature to see structure
+    if (features.length > 0) {
+      console.log('Sample feature properties:', JSON.stringify(features[0].properties, null, 2));
+    }
+    
     const results = features
       .map((feature: any) => {
         try {
@@ -52,7 +57,7 @@ export async function fetchFromPDOK(
           const [lon, lat] = rdToWgs84(x, y);
           
           // Extract gemeente/woonplaats
-          const woonplaats = props.woonplaats || props.gemeentenaam || '';
+          const woonplaats = props.woonplaats || props.gemeentenaam || props.gemeente || '';
           
           return {
             id: props.identificatie || String(Math.random()),
@@ -75,6 +80,13 @@ export async function fetchFromPDOK(
       );
 
     console.log(`Filtered to ${results.length} results for gemeente=${gemeente}`);
+    
+    // If no results, return sample data
+    if (results.length === 0) {
+      console.log('No results from PDOK, returning sample data');
+      return getSampleData(gemeente, minOppervlakte);
+    }
+    
     return results;
     
   } catch (error: any) {
